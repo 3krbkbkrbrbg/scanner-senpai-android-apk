@@ -1,0 +1,6 @@
+{
+  "name": "SenPai Scanner",
+  "description": "High-performance Cloudflare IP Scanner for finding clean IP addresses with ultra-low latency and fast download speeds.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
