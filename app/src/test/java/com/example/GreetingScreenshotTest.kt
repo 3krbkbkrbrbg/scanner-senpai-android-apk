@@ -23,7 +23,7 @@ class GreetingScreenshotTest {
   fun greeting_screenshot() {
     composeTestRule.setContent {
       MyApplicationTheme {
-        androidx.compose.material3.Text("SenPai Scanner Diagnostic Screen")
+        androidx.compose.material3.Text("AYASA VPN Diagnostic Screen")
       }
     }
 

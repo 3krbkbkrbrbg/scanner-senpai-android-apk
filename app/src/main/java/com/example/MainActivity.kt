@@ -14,8 +14,27 @@ import com.example.ui.ScannerViewModel
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
+
+  private var pendingVpnAction: (() -> Unit)? = null
+
+  private val vpnPermissionLauncher = registerForActivityResult(
+    androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+  ) { result ->
+    if (result.resultCode == RESULT_OK) {
+      pendingVpnAction?.invoke()
+    }
+    pendingVpnAction = null
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    
+    // Register VPN permission helper handle
+    com.example.data.VpnPermissionHelper.onPrepareRequired = { intent, onGranted ->
+      pendingVpnAction = onGranted
+      vpnPermissionLauncher.launch(intent)
+    }
+
     enableEdgeToEdge()
     setContent {
       MyApplicationTheme {
@@ -28,5 +47,10 @@ class MainActivity : ComponentActivity() {
         }
       }
     }
+  }
+
+  override fun onDestroy() {
+    com.example.data.VpnPermissionHelper.onPrepareRequired = null
+    super.onDestroy()
   }
 }

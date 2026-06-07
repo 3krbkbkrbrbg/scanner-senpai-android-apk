@@ -5,9 +5,10 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [SavedIp::class], version = 1, exportSchema = false)
+@Database(entities = [SavedIp::class, Subscription::class, V2RayConfig::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract val savedIpDao: SavedIpDao
+    abstract val v2RayDao: V2RayDao
 
     companion object {
         @Volatile

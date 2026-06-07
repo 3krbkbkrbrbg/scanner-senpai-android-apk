@@ -1,23 +1,20 @@
 package com.example.ui
 
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -33,11 +31,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.SavedIp
-import com.example.data.ScanResult
+import com.example.data.*
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,7 +47,7 @@ fun ScannerScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
-    // Observe State flows
+    // Observe Scanner State flows
     val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val scannedCount by viewModel.scannedCount.collectAsStateWithLifecycle()
@@ -58,47 +56,68 @@ fun ScannerScreen(
     val scannedIpsList by viewModel.scannedIpsList.collectAsStateWithLifecycle()
     val savedIpsList by viewModel.savedIpsList.collectAsStateWithLifecycle()
 
-    var activeTab by remember { mutableStateOf(0) } // 0 = Scanner, 1 = Config, 2 = Saved Results
+    // Observe V2Ray Config Flows
+    val v2RayConfigs by viewModel.v2RayConfigsList.collectAsStateWithLifecycle()
+    val selectedConfig by viewModel.selectedConfig.collectAsStateWithLifecycle()
+    val subscriptions by viewModel.subscriptionsList.collectAsStateWithLifecycle()
+    val isUpdatingSubs by viewModel.isUpdatingSubs.collectAsStateWithLifecycle()
+    val isTestingConfigs by viewModel.isTestingConfigs.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
-                            modifier = Modifier.size(36.dp)
+    // Observe VPN state flows
+    val vpnState by viewModel.vpnConnectionState.collectAsStateWithLifecycle()
+    val vpnLogs by viewModel.vpnLogs.collectAsStateWithLifecycle()
+    val uploadSpeed by viewModel.vpnUploadSpeed.collectAsStateWithLifecycle()
+    val downloadSpeed by viewModel.vpnDownloadSpeed.collectAsStateWithLifecycle()
+    val totalBytes by viewModel.vpnTotalBytes.collectAsStateWithLifecycle()
+
+    var activeTab by remember { mutableStateOf(0) } // 0=Scanner, 1=V2Ray VPN, 2=Subs, 3=Saved IPs, 4=Params
+    var showSplash by remember { mutableStateOf(true) }
+
+    if (showSplash) {
+        AysiSplashScreen(onTimeout = { showSplash = false })
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Menu,
-                                    contentDescription = "App Icon",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = "AYSI VPN Secure Icon",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Column {
+                                Text(
+                                    text = "AYSI VPN",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                Text(
+                                    "Ultra-Secure V2Ray Tunnel & IP Scanner",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                        Column {
-                            Text(
-                                text = "SenPai Scanner",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Text(
-                                "Cloudflare Optimizer Engine",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
+                    },
                 actions = {
-                    if (isScanning) {
+                    if (vpnState == ConnectionState.Connected) {
+                        TrafficIndicator(uploadSpeed = uploadSpeed, downloadSpeed = downloadSpeed, isConnected = true)
+                    }
+                    if (isScanning || isUpdatingSubs || isTestingConfigs) {
                         CircularProgressIndicator(
                             color = MaterialTheme.colorScheme.primary,
                             strokeWidth = 2.dp,
@@ -106,6 +125,12 @@ fun ScannerScreen(
                                 .size(24.dp)
                                 .padding(end = 8.dp)
                         )
+                    }
+                    IconButton(onClick = {
+                        viewModel.updateAndPingAllSubscriptions()
+                        Toast.makeText(context, "در حال بروزرسانی مخازن...", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Subscriptions")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -122,23 +147,37 @@ fun ScannerScreen(
                 NavigationBarItem(
                     selected = activeTab == 0,
                     onClick = { activeTab = 0 },
-                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Scanner Tab") },
-                    label = { Text("Scanner") },
+                    icon = { Icon(Icons.Default.Search, contentDescription = "Scanner Tab") },
+                    label = { Text("اسکنر IP", fontSize = 10.sp) },
                     modifier = Modifier.testTag("nav_scanner_tab")
                 )
                 NavigationBarItem(
                     selected = activeTab == 1,
                     onClick = { activeTab = 1 },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = "Config Tab") },
-                    label = { Text("Config") },
-                    modifier = Modifier.testTag("nav_config_tab")
+                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = "VPN Tab") },
+                    label = { Text("ویتوری VPN", fontSize = 10.sp) },
+                    modifier = Modifier.testTag("nav_vpn_tab")
                 )
                 NavigationBarItem(
                     selected = activeTab == 2,
                     onClick = { activeTab = 2 },
+                    icon = { Icon(Icons.Default.Share, contentDescription = "Subs Tab") },
+                    label = { Text("مخازن (Sub)", fontSize = 10.sp) },
+                    modifier = Modifier.testTag("nav_subs_tab")
+                )
+                NavigationBarItem(
+                    selected = activeTab == 3,
+                    onClick = { activeTab = 3 },
                     icon = { Icon(Icons.Default.Favorite, contentDescription = "Saved Tab") },
-                    label = { Text("Saved") },
+                    label = { Text("پین‌شده‌ها", fontSize = 10.sp) },
                     modifier = Modifier.testTag("nav_saved_tab")
+                )
+                NavigationBarItem(
+                    selected = activeTab == 4,
+                    onClick = { activeTab = 4 },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Config Tab") },
+                    label = { Text("تنظیمات", fontSize = 10.sp) },
+                    modifier = Modifier.testTag("nav_config_tab")
                 )
             }
         },
@@ -158,7 +197,7 @@ fun ScannerScreen(
                     )
                 )
         ) {
-            // Scanner Stats Hero Bar (Always Visible on Scan Screen)
+            // Scanner Stats Hero Bar (Only Visible when Scanning)
             AnimatedVisibility(
                 visible = isScanning,
                 enter = fadeIn() + expandVertically(),
@@ -180,7 +219,7 @@ fun ScannerScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "Scanning IPs... ($scannedCount / $totalToScan)",
+                                text = "در حال اسکن آی‌پی‌ها... ($scannedCount / $totalToScan)",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -203,17 +242,18 @@ fun ScannerScreen(
                         )
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column {
                                 Text(
-                                    "Clean Found",
+                                    "آی‌پی سالم یافت‌شده",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "$activeCleanIpsFound IPs",
+                                    text = "$activeCleanIpsFound IP",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.secondary
@@ -225,9 +265,7 @@ fun ScannerScreen(
                                     containerColor = MaterialTheme.colorScheme.error
                                 ),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                modifier = Modifier
-                                    .align(Alignment.CenterVertically)
-                                    .testTag("stop_scan_button")
+                                modifier = Modifier.testTag("stop_scan_button")
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -238,7 +276,7 @@ fun ScannerScreen(
                                         contentDescription = "Stop",
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Text("Stop", style = MaterialTheme.typography.bodySmall)
+                                    Text("توقف اسکن", style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
@@ -253,30 +291,63 @@ fun ScannerScreen(
                     scannedIpsList = scannedIpsList,
                     onSaveIp = { ip, lat, speed ->
                         viewModel.saveIpToDb(ip, lat, speed)
-                        Toast.makeText(context, "Saved IP: $ip", Toast.LENGTH_SHORT).show()
                     },
                     onCopyIp = { ip ->
                         clipboardManager.setText(AnnotatedString(ip))
-                        Toast.makeText(context, "Copied $ip to clipboard", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "آی‌پی $ip کپی شد", Toast.LENGTH_SHORT).show()
                     },
                     savedIps = savedIpsList
                 )
-                1 -> ConfigView(viewModel = viewModel, isScanning = isScanning)
-                2 -> SavedResultsView(
+                1 -> V2RayClientView(
+                    viewModel = viewModel,
+                    v2RayConfigs = v2RayConfigs,
+                    selectedConfig = selectedConfig,
+                    savedIps = savedIpsList,
+                    vpnState = vpnState,
+                    logs = vpnLogs,
+                    uploadSpeed = uploadSpeed,
+                    downloadSpeed = downloadSpeed,
+                    totalBytes = totalBytes,
+                    onCopyConfig = { config ->
+                        val optimizedUri = if (config.optimizedIp.isNotEmpty()) {
+                            V2RayParser.optimizeUriWithIp(config, config.optimizedIp)
+                        } else {
+                            config.rawUri
+                        }
+                        clipboardManager.setText(AnnotatedString(optimizedUri))
+                        Toast.makeText(context, "کانفیگ برای v2rayNG کپی شد", Toast.LENGTH_SHORT).show()
+                    },
+                    onSwapIp = { config, ip ->
+                        viewModel.optimizeConfigWithCleanIp(config, ip)
+                        Toast.makeText(context, "آی‌پی کانفیگ با $ip جایگزین شد!", Toast.LENGTH_SHORT).show()
+                    },
+                    onRevertIp = { config ->
+                        viewModel.removeOptimization(config)
+                        Toast.makeText(context, "تنظیمات آی‌پی به حالت اول برگشت", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                2 -> SubscriptionsView(
+                    viewModel = viewModel,
+                    subscriptions = subscriptions,
+                    isUpdating = isUpdatingSubs
+                )
+                3 -> SavedResultsView(
                     viewModel = viewModel,
                     savedIps = savedIpsList,
                     onCopyIp = { ip ->
                         clipboardManager.setText(AnnotatedString(ip))
-                        Toast.makeText(context, "Copied $ip to clipboard", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "آی‌پی کپی شد", Toast.LENGTH_SHORT).show()
                     },
                     onRemoveIp = { ip ->
                         viewModel.removeFromDb(ip)
-                        Toast.makeText(context, "Removed saved IP", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "برداشته شد", Toast.LENGTH_SHORT).show()
                     }
                 )
+                4 -> ConfigView(viewModel = viewModel, isScanning = isScanning)
             }
         }
     }
+}
 }
 
 @Composable
@@ -312,13 +383,13 @@ fun ScannerView(
                         modifier = Modifier.size(80.dp)
                     )
                     Text(
-                        text = "Ready to discover optimizing IPs",
+                        text = "اسکنر خودکار کلودفلر",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "Press 'Start Scan' to evaluate random samples from Cloudflare network ranges and measure latency/speed performance.",
+                        text = "این قسمت آی‌پی‌های تمیز و پرسرعت کلودفلر مخصوص متصل شدن به کلاینت و فیلتر شکن را شناسایی می‌کند. این آی‌پی‌های سالم را پس از اسکن می‌توانید در کانفیگ‌های وی‌پی‌ان خود استفاده کنید.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -338,7 +409,7 @@ fun ScannerView(
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = "Scan")
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Start Scan", style = MaterialTheme.typography.titleSmall)
+                        Text("شروع اسکن آی‌پی", style = MaterialTheme.typography.titleSmall)
                     }
                 }
             }
@@ -351,7 +422,7 @@ fun ScannerView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Live Results (sorted by quality)",
+                    text = "لیست آی‌پی‌های کلودفلر یافت‌شده",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -367,7 +438,7 @@ fun ScannerView(
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = "Restart", modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Rescan", style = MaterialTheme.typography.bodySmall)
+                        Text("اسکن مجدد", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -401,101 +472,1264 @@ fun ScanResultCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        shape = RoundedCornerShape(10.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = result.ip,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                
                 Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
-                        modifier = Modifier.size(8.dp)
-                    ) {}
                     Text(
-                        text = result.ip,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
+                        text = "پینگ: ${result.latency}ms",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (result.latency in 1..250) SlateAccentGreen else SlateAccentOrange
+                    )
+                    
+                    if (result.downloadSpeed > 0.0) {
+                        Text(
+                            text = "سرعت: ${String.format("%.1f KB/s", result.downloadSpeed)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(onClick = onCopy) {
+                    Icon(Icons.Outlined.Share, contentDescription = "Copy IP", modifier = Modifier.size(20.dp))
+                }
+                
+                IconButton(onClick = { if (isSaved) onUnsave() else onSave() }) {
+                    Icon(
+                        imageVector = if (isSaved) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = "Save IP",
+                        tint = if (isSaved) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
+            }
+        }
+    }
+}
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.padding(start = 18.dp)
+// Subscriptions View
+@Composable
+fun SubscriptionsView(
+    viewModel: ScannerViewModel,
+    subscriptions: List<Subscription>,
+    isUpdating: Boolean
+) {
+    val context = LocalContext.current
+    var newSubName by remember { mutableStateOf("") }
+    var newSubUrl by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text(
+            text = "مخازن کانفیگ (v2ray Subscription)",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "لینک ساب‌های خود را اضافه کنید. برنامه به طور خودکار به محض باز شدن مخازن را برای یافتن کانفیگ‌های تازه آپدیت می‌کند و پینگ می‌گیرد.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("افزودن مخزن جدید", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                
+                OutlinedTextField(
+                    value = newSubName,
+                    onValueChange = { newSubName = it },
+                    label = { Text("نام تمایز مخرن (مثلاً مخزن رایگان)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                OutlinedTextField(
+                    value = newSubUrl,
+                    onValueChange = { newSubUrl = it },
+                    label = { Text("لینک ساب (Subscription URL)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                Button(
+                    onClick = {
+                        if (newSubName.isNotBlank() && newSubUrl.isNotBlank()) {
+                            viewModel.addSubscription(newSubName, newSubUrl)
+                            newSubName = ""
+                            newSubUrl = ""
+                            Toast.makeText(context, "مخزن ساب اضافه و بروزرسانی شد!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "لطفاً مقادیر را پر کنید", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.End)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Ping",
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+                    Icon(Icons.Default.Add, contentDescription = "Add")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("افزودن و بروزرسانی")
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("مخازن ثبت شده", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = { viewModel.updateAndPingAllSubscriptions() },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                enabled = !isUpdating
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = "Sync", modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("آپدیت همگانی", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(subscriptions, key = { it.id }) { sub ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(sub.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                sub.url, 
+                                style = MaterialTheme.typography.labelSmall, 
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (sub.lastUpdated > 0) {
+                                val date = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault())
+                                    .format(java.util.Date(sub.lastUpdated))
+                                Text(
+                                    "آخرین بروزرسانی: $date", 
+                                    style = MaterialTheme.typography.labelSmall, 
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+                        
+                        IconButton(onClick = { viewModel.deleteSubscription(sub) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete Sub", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// V2Ray Configurations & Connection Center
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun V2RayClientView(
+    viewModel: ScannerViewModel,
+    v2RayConfigs: List<V2RayConfig>,
+    selectedConfig: V2RayConfig?,
+    savedIps: List<SavedIp>,
+    vpnState: ConnectionState,
+    logs: List<String>,
+    uploadSpeed: Double,
+    downloadSpeed: Double,
+    totalBytes: Long,
+    onCopyConfig: (V2RayConfig) -> Unit,
+    onSwapIp: (V2RayConfig, String) -> Unit,
+    onRevertIp: (V2RayConfig) -> Unit
+) {
+    val context = LocalContext.current
+    var selectedConfigForOptimize by remember { mutableStateOf<V2RayConfig?>(null) }
+    var showOptimizationDialog by remember { mutableStateOf(false) }
+    val proxyTunnelAppsEnabled by viewModel.vpnService.proxyTunnelAppsEnabled.collectAsStateWithLifecycle()
+    
+    // Manual setup / Editing modes state
+    var showEditDialog by remember { mutableStateOf(false) }
+    var configToEdit by remember { mutableStateOf<V2RayConfig?>(null) }
+
+    // Pulsing transition for connection animation
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse_trans")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse_scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.7f,
+        targetValue = 0.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse_alpha"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 1. Compact Premium Connect Dashboard Card
+        Card(
+            modifier = Modifier.fillMaxWidth().testTag("vpn_dashboard_card"),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Info Section
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val statusColor = when (vpnState) {
+                        ConnectionState.Idle -> SlateTextSecondary
+                        ConnectionState.Connected -> SlateAccentGreen
+                        is ConnectionState.Error -> MaterialTheme.colorScheme.error
+                        else -> SlateAccentOrange
+                    }
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = statusColor,
+                            modifier = Modifier.size(8.dp)
+                        ) {}
                         Text(
-                            text = "${result.latency} ms",
+                            text = when (vpnState) {
+                                ConnectionState.Idle -> "غیرفعال (Disconnected)"
+                                ConnectionState.Resolving -> "در حال بررسی روت..."
+                                ConnectionState.Handshaking -> "در حال ثبت لندینگ..."
+                                ConnectionState.Authenticating -> "در حال رمزگذاری..."
+                                ConnectionState.Connected -> "امن و متصل شده"
+                                is ConnectionState.Error -> "خطای اتصال به سرور"
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (result.latency < 200) MaterialTheme.colorScheme.secondary else SlateAccentOrange
+                            fontWeight = FontWeight.Bold,
+                            color = statusColor
                         )
                     }
 
-                    if (result.downloadSpeed > 0) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (selectedConfig != null) {
+                        Text(
+                            text = selectedConfig.remark,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Black,
+                            color = SlateTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "پروتکل: ${selectedConfig.protocol.uppercase()} (${selectedConfig.type.uppercase()})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SlateTextSecondary
+                        )
+                    } else {
+                        Text(
+                            text = "سروری انتخاب نشده است",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = SlateTextSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Small elegant Connect Button with pulsing indicator on action
+                val isButtonAnimating = vpnState != ConnectionState.Idle
+                val buttonColor = when (vpnState) {
+                    ConnectionState.Idle -> MaterialTheme.colorScheme.primary
+                    ConnectionState.Connected -> MaterialTheme.colorScheme.error
+                    is ConnectionState.Error -> MaterialTheme.colorScheme.error
+                    else -> SlateAccentOrange
+                }
+
+                Box(contentAlignment = Alignment.Center) {
+                    if (isButtonAnimating) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .graphicsLayer(
+                                    scaleX = pulseScale,
+                                    scaleY = pulseScale,
+                                    alpha = pulseAlpha
+                                )
+                                .background(buttonColor.copy(alpha = 0.45f), shape = CircleShape)
+                        )
+                    }
+                    
+                    Surface(
+                        onClick = {
+                            if (vpnState == ConnectionState.Connected) {
+                                viewModel.vpnService.disconnect()
+                            } else {
+                                val activeConfig = selectedConfig ?: v2RayConfigs.firstOrNull()
+                                if (activeConfig != null) {
+                                    viewModel.vpnService.connect(activeConfig)
+                                } else {
+                                    Toast.makeText(context, "لطفا ابتدا یک سرور اضافه کنید", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        shape = CircleShape,
+                        color = buttonColor,
+                        modifier = Modifier.size(52.dp).testTag("vpn_toggle_button"),
+                        tonalElevation = 6.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = "Speed",
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.secondary
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = String.format("%.1f KB/s", result.downloadSpeed),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.secondary
+                                imageVector = if (vpnState == ConnectionState.Connected) Icons.Default.Close else Icons.Default.PlayArrow,
+                                contentDescription = "Connect Toggle",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
                 }
             }
+        }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+        // 2. Metrics Telemetry Cards (Gauges)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Card(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
             ) {
-                IconButton(onClick = onCopy) {
-                    Icon(
-                        Icons.Default.Build, // Represent Copy
-                        contentDescription = "Copy IP",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowDown, "Download Icon", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
+                        Text("دریافت (Download)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (vpnState == ConnectionState.Connected) String.format("%.1f KB/s", downloadSpeed) else "0.0 KB/s",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = SlateAccentGreen
                     )
                 }
+            }
 
-                val iconColor by animateColorAsState(
-                    targetValue = if (isSaved) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = tween(300)
-                )
-
-                IconButton(onClick = { if (isSaved) onUnsave() else onSave() }) {
-                    Icon(
-                        imageVector = if (isSaved) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Save IP",
-                        tint = iconColor
+            Card(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowUp, "Upload Icon", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                        Text("ارسال (Upload)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (vpnState == ConnectionState.Connected) String.format("%.1f KB/s", uploadSpeed) else "0.0 KB/s",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
+                }
+            }
+        }
+
+        // Active server name / metadata card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (selectedConfig != null) {
+                    Text(
+                        text = "سرور فعال: ${selectedConfig.remark}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "پروتکل اتصال: ${selectedConfig.protocol.uppercase()} (${selectedConfig.type.uppercase()})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = "هیچ سروری انتخاب نشده است",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = SlateTextSecondary
+                    )
+                }
+            }
+        }
+
+        // Setting: Proxy Tunnel Applications
+        Card(
+            modifier = Modifier.fillMaxWidth().testTag("proxy_tunnel_apps_card"),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share, 
+                        contentDescription = "Proxy Apps Icon", 
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "Proxy Tunnel Applications",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = SlateTextPrimary
+                        )
+                        Text(
+                            text = "هدایت تمام ترافیک برنامه‌های نصب‌شده از تانل",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SlateTextSecondary
+                        )
+                    }
+                }
+                
+                Switch(
+                    checked = proxyTunnelAppsEnabled,
+                    onCheckedChange = { viewModel.vpnService.setProxyTunnelAppsEnabled(it) },
+                    modifier = Modifier.testTag("proxy_tunnel_apps_switch")
+                )
+            }
+        }
+
+        // Expanded/Collapsible Detailed Debug Config status logs and filters
+        DebugLogSection(
+            vpnState = vpnState,
+            logs = logs,
+            totalBytes = totalBytes,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        // 3. Real-Time Terminal Log console (Collapsible metadata logs)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF040815))
+                .padding(8.dp)
+        ) {
+            val displayLogs = logs.takeLast(3)
+            if (displayLogs.isEmpty()) {
+                Text(
+                    "کنسول رمزگذاری AYSI VPN آماده برقراری اتصال امن...",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    color = SlateTextSecondary,
+                    textAlign = TextAlign.Start
+                )
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(displayLogs) { logLine ->
+                        Text(
+                            logLine,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                            color = if (logLine.contains("successfully") || logLine.contains("Connected") || logLine.contains("system")) SlateAccentGreen else if (logLine.contains("Error") || logLine.contains("Fatal")) MaterialTheme.colorScheme.error else SlateTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        // TOOLBAR: manual addition, clipboard paste and pinging
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = {
+                    configToEdit = null // Adding mode
+                    showEditDialog = true
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Config", modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(2.dp))
+                Text("افزودن دستی", style = MaterialTheme.typography.labelSmall)
+            }
+
+            val clipboardManager = LocalClipboardManager.current
+            Button(
+                onClick = {
+                    val clipText = clipboardManager.getText()?.text ?: ""
+                    viewModel.importFromClipboard(
+                        text = clipText,
+                        onSuccess = { count ->
+                            Toast.makeText(context, "$count سرور با موفقیت وارد شد!", Toast.LENGTH_LONG).show()
+                        },
+                        onError = { errorMsg ->
+                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                        }
+                    )
+                },
+                modifier = Modifier.weight(1.2f).testTag("clipboard_import_button"),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = "Paste Clipboard", modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(2.dp))
+                Text("افزودن از کلیپ‌بورد", style = MaterialTheme.typography.labelSmall)
+            }
+
+            Button(
+                onClick = { viewModel.pingAllConfigs() },
+                enabled = !viewModel.isTestingConfigs.collectAsStateWithLifecycle().value,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = "Test Ping", modifier = Modifier.size(13.dp))
+                Spacer(modifier = Modifier.width(2.dp))
+                Text("پینگ همگانی", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+
+        Text(
+            text = "لیست سرورها (${v2RayConfigs.size})",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+
+        val groupedConfigs = remember(v2RayConfigs) {
+            v2RayConfigs.groupBy { it.subscriptionName }
+        }
+
+        if (groupedConfigs.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    "هیچ کانفیگی یافت نشد. لطفاً در قسمت مخازن اقدام به آپدیت همگانی کنید یا یک سرور دستی بیفزایید.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(32.dp)
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                groupedConfigs.forEach { (subscriptionName, configsInSub) ->
+                    // Subscription Category Sticky-style Header
+                    item(key = "header_${subscriptionName}") {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Subscription Folder",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = subscriptionName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "${configsInSub.size} سرور",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Render items inside this subscription group
+                    items(configsInSub, key = { it.id }) { config ->
+                        val isSelected = selectedConfig?.id == config.id
+                        val borderStroke = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.selectConfig(config)
+                                    if (vpnState == ConnectionState.Connected) {
+                                        viewModel.vpnService.connect(config)
+                                    }
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            border = borderStroke
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = {
+                                                viewModel.selectConfig(config)
+                                                if (vpnState == ConnectionState.Connected) {
+                                                    viewModel.vpnService.connect(config)
+                                                }
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+
+                                        val pillColor = when (config.protocol) {
+                                            "vmess" -> MaterialTheme.colorScheme.primary
+                                            "vless" -> MaterialTheme.colorScheme.secondary
+                                            "trojan" -> SlateAccentOrange
+                                            else -> Color.Gray
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(pillColor)
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                config.protocol.uppercase(), 
+                                                fontWeight = FontWeight.Bold, 
+                                                color = Color.White, 
+                                                fontSize = 9.sp
+                                            )
+                                        }
+                                        
+                                        Text(
+                                            config.remark, 
+                                            fontWeight = FontWeight.Bold, 
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        val latText = if (config.latency > 0) "${config.latency} ms" else "Stalled"
+                                        val latColor = if (config.latency > 0 && config.latency < 250) SlateAccentGreen else if (config.latency > 0) SlateAccentOrange else Color.Red
+                                        Text(
+                                            latText, 
+                                            style = MaterialTheme.typography.labelSmall, 
+                                            color = latColor,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "آدرس مقصد: ${config.address}:${config.port}", 
+                                            style = MaterialTheme.typography.labelSmall, 
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (config.optimizedIp.isNotEmpty()) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Check, 
+                                                    contentDescription = "Optimized", 
+                                                    tint = SlateAccentGreen,
+                                                    modifier = Modifier.size(10.dp)
+                                                )
+                                                Text(
+                                                    "Optimized: ${config.optimizedIp}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = SlateAccentGreen,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (config.optimizedIp.isNotEmpty()) {
+                                            IconButton(
+                                                onClick = { onRevertIp(config) },
+                                                modifier = Modifier.size(30.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Refresh, 
+                                                    contentDescription = "Revert Swap", 
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                        
+                                        Button(
+                                            onClick = {
+                                                selectedConfigForOptimize = config
+                                                showOptimizationDialog = true
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (config.optimizedIp.isNotEmpty()) MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Build, 
+                                                contentDescription = "Swap IP Address", 
+                                                tint = if (config.optimizedIp.isNotEmpty()) MaterialTheme.colorScheme.secondary else Color.White,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                if (config.optimizedIp.isNotEmpty()) "ویرایش IP" else "تغییر IP", 
+                                                fontSize = 9.sp,
+                                                color = if (config.optimizedIp.isNotEmpty()) MaterialTheme.colorScheme.secondary else Color.White
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = { viewModel.pingSingleConfig(config) },
+                                            modifier = Modifier.size(30.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.PlayArrow, 
+                                                contentDescription = "Ping Single Server", 
+                                                tint = MaterialTheme.colorScheme.secondary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = {
+                                                configToEdit = config
+                                                showEditDialog = true
+                                            },
+                                            modifier = Modifier.size(30.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Edit, 
+                                                contentDescription = "Edit Server Details", 
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = { onCopyConfig(config) },
+                                            modifier = Modifier.size(30.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Share, 
+                                                contentDescription = "Copy Config URI", 
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = { viewModel.deleteConfig(config) },
+                                            modifier = Modifier.size(30.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Delete, 
+                                                contentDescription = "Delete Server", 
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showOptimizationDialog && selectedConfigForOptimize != null) {
+        AlertDialog(
+            onDismissRequest = { showOptimizationDialog = false },
+            title = { Text("جایگزینی آی‌پی معتبر کلودفلر") },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "آی‌پی مورد نظر جهت تزریق به کانفیگ را از میان آی‌پی‌های پرسرعتی که با موفقیت اسکن کرده‌اید انتخاب کنید:",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    if (savedIps.isEmpty()) {
+                        Text(
+                            "آی‌پی ذخیره شده در دیتابیس ندارید. لطفاً به زبانه اسکنر بروید و پس از اسکن، آی‌پی‌های سالم را ستاره‌دار کنید تا اینجا مشاهده شود.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(savedIps) { ipNode ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .clickable {
+                                            onSwapIp(selectedConfigForOptimize!!, ipNode.ipAddress)
+                                            showOptimizationDialog = false
+                                        }
+                                        .padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        ipNode.ipAddress, 
+                                        fontFamily = FontFamily.Monospace, 
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        "${ipNode.latency} ms | ${String.format("%.1f KB/s", ipNode.downloadSpeed)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showOptimizationDialog = false }) {
+                    Text("بستن")
+                }
+            }
+        )
+    }
+
+    if (showEditDialog) {
+        EditConfigDialog(
+            config = configToEdit,
+            onDismiss = { showEditDialog = false },
+            onSave = { updatedOrNew ->
+                if (updatedOrNew.id == 0L) {
+                    viewModel.addManualConfig(updatedOrNew)
+                } else {
+                    viewModel.updateConfig(updatedOrNew)
+                }
+                showEditDialog = false
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditConfigDialog(
+    config: V2RayConfig?,
+    onDismiss: () -> Unit,
+    onSave: (V2RayConfig) -> Unit
+) {
+    var remark by remember { mutableStateOf(config?.remark ?: "") }
+    var protocol by remember { mutableStateOf(config?.protocol ?: "vless") }
+    var address by remember { mutableStateOf(config?.address ?: "") }
+    var port by remember { mutableStateOf(config?.port?.toString() ?: "443") }
+    var uuid by remember { mutableStateOf(config?.uuid ?: "") }
+    var security by remember { mutableStateOf(config?.security ?: "none") }
+    var type by remember { mutableStateOf(config?.type ?: "tcp") }
+    var host by remember { mutableStateOf(config?.host ?: "") }
+    var path by remember { mutableStateOf(config?.path ?: "") }
+    var sni by remember { mutableStateOf(config?.sni ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = if (config == null) "افزودن کانفیگ دستی" else "ویرایش کانفیگ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    OutlinedTextField(
+                        value = remark,
+                        onValueChange = { remark = it },
+                        label = { Text("نام سرور / Remark") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    Column {
+                        Text("پروتکل اتصال:", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            listOf("vless", "vmess", "trojan", "shadowsocks").forEach { prot ->
+                                FilterChip(
+                                    selected = protocol == prot,
+                                    onClick = { protocol = prot },
+                                    label = { Text(prot.uppercase()) }
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = address,
+                        onValueChange = { address = it },
+                        label = { Text("آدرس سرور / IP / Domain") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = port,
+                        onValueChange = { port = it },
+                        label = { Text("پورت / Port") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = uuid,
+                        onValueChange = { uuid = it },
+                        label = { Text(if (protocol == "shadowsocks" || protocol == "trojan") "رمز عبور / Password" else "شناسه / UUID") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (protocol != "shadowsocks") {
+                    item {
+                        OutlinedTextField(
+                            value = security,
+                            onValueChange = { security = it },
+                            label = { Text("امنیت (Security: e.g. none, tls)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = type,
+                            onValueChange = { type = it },
+                            label = { Text("شبکه (Network Type: tcp, ws, grpc)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = host,
+                            onValueChange = { host = it },
+                            label = { Text("هاست / Host Header") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = path,
+                            onValueChange = { path = it },
+                            label = { Text("مسیر / Path") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = sni,
+                            onValueChange = { sni = it },
+                            label = { Text("اس ان آی / SNI") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (remark.isBlank() || address.isBlank() || port.isBlank()) return@Button
+                    val pNum = port.toIntOrNull() ?: 443
+                    val newOrUpdated = V2RayConfig(
+                        id = config?.id ?: 0,
+                        remark = remark,
+                        protocol = protocol,
+                        address = address,
+                        port = pNum,
+                        uuid = uuid,
+                        security = security,
+                        type = type,
+                        host = host,
+                        path = path,
+                        sni = sni,
+                        rawUri = config?.rawUri ?: "$protocol://$uuid@$address:$port",
+                        optimizedIp = config?.optimizedIp ?: "",
+                        latency = config?.latency ?: -1,
+                        timestamp = config?.timestamp ?: System.currentTimeMillis()
+                    )
+                    onSave(newOrUpdated)
+                }
+            ) {
+                Text("ذخیره")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("انصراف")
+            }
+        }
+    )
+}
+
+@Composable
+fun SavedResultsView(
+    viewModel: ScannerViewModel,
+    savedIps: List<SavedIp>,
+    onCopyIp: (String) -> Unit,
+    onRemoveIp: (SavedIp) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "آی‌پی‌های پین‌شده‌ی شما (${savedIps.size})",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            if (savedIps.isNotEmpty()) {
+                TextButton(
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    onClick = { viewModel.clearHistory() }
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("کامل پاک کن", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+
+        if (savedIps.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    "هیچ آی‌پی ذخیره شده‌ای یافت نشد. پس از اسکن، آی‌پی‌های سالم را ستاره‌دار کنید.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(32.dp)
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(savedIps, key = { it.id }) { node ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    node.ipAddress,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                ) {
+                                    Text(
+                                        "پینگ: ${node.latency}ms",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = SlateAccentGreen
+                                    )
+                                    if (node.downloadSpeed > 0) {
+                                        Text(
+                                            "سرعت: ${String.format("%.1f KB/s", node.downloadSpeed)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            Row {
+                                IconButton(onClick = { onCopyIp(node.ipAddress) }) {
+                                    Icon(Icons.Outlined.Share, contentDescription = "Copy IP")
+                                }
+                                IconButton(onClick = { onRemoveIp(node) }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -521,171 +1755,226 @@ fun ConfigView(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
+            Text("پارامترهای اسکن آی‌پی", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Scan Parameters",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Fine-tune the target evaluation variables below. Running higher concurrent threads scans faster but requires steady bandwidth.",
+                "این تنظیمات نحوه پویش و جستجوی پینگ آی‌پی‌های لبه کلودفلر را کنترل می‌کند.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("پورت هدف اسکن", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = port.toString(),
+                        onValueChange = { viewModel.port.value = it.toIntOrNull() ?: 443 },
+                        label = { Text("پورت (به طور پیشفرض 443)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isScanning
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("تعداد آی‌پی‌های تولیدی جهت اسکن", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("$ipCount IP", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = ipCount.toFloat(),
+                        onValueChange = { viewModel.ipCount.value = it.toInt() },
+                        valueRange = 10f..500f,
+                        enabled = !isScanning
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("تعداد ترد همزمان (Threads)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("$threadsCount ترد", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = threadsCount.toFloat(),
+                        onValueChange = { viewModel.threadsCount.value = it.toInt() },
+                        valueRange = 1f..64f,
+                        enabled = !isScanning
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("حداکثر مهلت پاسخ (Timeout)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("$timeoutMs ms", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = timeoutMs.toFloat(),
+                        onValueChange = { viewModel.timeoutMs.value = it.toInt() },
+                        valueRange = 300f..3000f,
+                        enabled = !isScanning
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Custom CIDR Range Input
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("اسکن تست سرعت دانلود", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("پس از یافتن آی‌پی پینگ مناسب، یک دانلود ۵۰۰ کیلوبایتی جهت کنترل صحت پهنای باند انجام می‌دهد.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = testSpeedEnabled,
+                        onCheckedChange = { viewModel.testSpeedEnabled.value = it },
+                        enabled = !isScanning
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("رنج آی‌پی اختصاصی (CIDR block)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                     OutlinedTextField(
                         value = customIpCidr,
                         onValueChange = { viewModel.customIpCidr.value = it },
-                        label = { Text("Custom Cloudflare CIDR (Optional)") },
-                        placeholder = { Text("e.g. 104.16.0.0/13") },
+                        placeholder = { Text("مثال: 162.159.192.0/24") },
+                        label = { Text("رنج آی‌پی جداگانه (خالی برای آی‌پی رندوم)") },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isScanning,
-                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = "Network") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                        shape = RoundedCornerShape(8.dp)
+                        enabled = !isScanning
                     )
+                }
+            }
+        }
 
-                    // Target Port Field
+        item {
+            val proxyTunnelAppsEnabled by viewModel.vpnService.proxyTunnelAppsEnabled.collectAsStateWithLifecycle()
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Proxy Tunnel Applications", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("تونل کردن اجباری و ۱۰۰ درصدی تمام برنامه‌های نصب‌پذیر دستگاه از تانل VPN.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = proxyTunnelAppsEnabled,
+                        onCheckedChange = { viewModel.vpnService.setProxyTunnelAppsEnabled(it) }
+                    )
+                }
+            }
+        }
+
+        // About AYSI VPN Premium Integrity Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF42A5F5).copy(alpha = 0.25f)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            "Scan Port (TCP)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Surface(
+                            shape = CircleShape,
+                            color = SlatePrimary.copy(alpha = 0.15f),
+                            modifier = Modifier.size(42.dp)
                         ) {
-                            listOf(443, 80, 8443).forEach { p ->
-                                FilterChip(
-                                    selected = port == p,
-                                    onClick = { if (!isScanning) viewModel.port.value = p },
-                                    label = { Text(p.toString()) },
-                                    enabled = !isScanning
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Shield Lock",
+                                    tint = SlatePrimary,
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
-                    }
-
-                    // Max IP sample count slider
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
+                        Column {
                             Text(
-                                "Target IP Samples",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                                "AYSI VPN Premium",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                color = SlateTextPrimary
                             )
                             Text(
-                                "$ipCount IPs",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                "امنیت نظامی، آزادی بی حد و مرز",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SlateAccentGreen,
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                        Slider(
-                            value = ipCount.toFloat(),
-                            onValueChange = { viewModel.ipCount.value = it.toInt() },
-                            valueRange = 20f..300f,
-                            steps = 14,
-                            enabled = !isScanning
-                        )
                     }
 
-                    // Concurrent threads slider
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                "Concurrent Threads",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "$threadsCount threads",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                    HorizontalDivider(color = Color(0xFF1E293B))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Check, "Checked", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
+                            Text("رمزگذاری پیشرفته AES-256 GCM", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
                         }
-                        Slider(
-                            value = threadsCount.toFloat(),
-                            onValueChange = { viewModel.threadsCount.value = it.toInt() },
-                            valueRange = 8f..64f,
-                            steps = 7,
-                            enabled = !isScanning
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Check, "Checked", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
+                            Text("عدم ذخیره‌سازی ترافیک (Strict No-Logs 정책)", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Check, "Checked", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
+                            Text("رابطه اتصال روتین پایدار با سرعت تانلینگ بالا", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Check, "Checked", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
+                            Text("سازگاری با IPv4 و IPv6 دوگانه به صورت خودکار", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
+                        }
                     }
 
-                    // Connection Timeout Slider
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                "Socket Connection Timeout",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "$timeoutMs ms",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Slider(
-                            value = timeoutMs.toFloat(),
-                            onValueChange = { viewModel.timeoutMs.value = it.toInt() },
-                            valueRange = 500f..3000f,
-                            steps = 5,
-                            enabled = !isScanning
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                    // Download Speed test toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Measure Download Speed",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "Downloads a small payload through clean IPs to calculate actual routing speed.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = testSpeedEnabled,
-                            onCheckedChange = { viewModel.testSpeedEnabled.value = it },
-                            enabled = !isScanning
-                        )
-                    }
+                    Text(
+                        text = "نسخه برنامه: v2.5.0 Premium Edition\nتوسعه یافته با ❤️ برای آزادی اینترنت و حریم شخصی کاربران ایران.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SlateTextSecondary.copy(alpha = 0.8f),
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp
+                    )
                 }
             }
         }
@@ -693,163 +1982,346 @@ fun ConfigView(
 }
 
 @Composable
-fun SavedResultsView(
-    viewModel: ScannerViewModel,
-    savedIps: List<SavedIp>,
-    onCopyIp: (String) -> Unit,
-    onRemoveIp: (SavedIp) -> Unit
+fun AysiSplashScreen(
+    onTimeout: () -> Unit
 ) {
-    Column(
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(1800)
+        onTimeout()
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
+            .background(Color(0xFF070B19)),
+        contentAlignment = Alignment.Center
     ) {
-        if (savedIps.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Rounded Shield Logo Frame
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFF0F172A),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF42A5F5).copy(alpha = 0.4f)),
+                modifier = Modifier.size(100.dp)
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.padding(32.dp)
-                ) {
+                Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Default.FavoriteBorder,
-                        contentDescription = "Empty Saved",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(80.dp)
-                    )
-                    Text(
-                        text = "No saved IPs yet",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "Your bookmarks of top-performing IPs will be shown here. Save them key IPs from the scanning screen to keep track.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "AYSI Shield",
+                        tint = SlateAccentGreen,
+                        modifier = Modifier.size(48.dp)
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "AYSI VPN",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 4.sp
+                ),
+                color = SlateTextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "امنیت واقعی، اینترنت آزاد",
+                style = MaterialTheme.typography.bodySmall,
+                color = SlateAccentGreen,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            CircularProgressIndicator(
+                color = SlatePrimary,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun TrafficIndicator(uploadSpeed: Double, downloadSpeed: Double, isConnected: Boolean) {
+    if (!isConnected) return
+    
+    val formatSpeed: (Double) -> String = { speed ->
+        if (speed >= 1024) {
+            String.format("%.1f MB/s", speed / 1024.0)
         } else {
+            String.format("%.1f KB/s", speed)
+        }
+    }
+    
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f),
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+        ),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .padding(end = 4.dp, start = 4.dp)
+            .testTag("traffic_indicator_badge"),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.Start
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Downloads",
+                    tint = SlateAccentGreen,
+                    modifier = Modifier.size(11.dp)
+                )
+                Text(
+                    text = "↓ ${formatSpeed(downloadSpeed)}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowUp,
+                    contentDescription = "Uploads",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(11.dp)
+                )
+                Text(
+                    text = "↑ ${formatSpeed(uploadSpeed)}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DebugLogSection(
+    vpnState: ConnectionState,
+    logs: List<String>,
+    totalBytes: Long,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    var logFilter by remember { mutableStateOf("ALL") }
+
+    Card(
+        modifier = modifier.fillMaxWidth().testTag("debug_log_section_card"),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Saved Cloudflare Optimizer IPs (${savedIps.size})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                TextButton(
-                    onClick = { viewModel.clearHistory() },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    modifier = Modifier.testTag("clear_history_button")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Clear All", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Clear All", style = MaterialTheme.typography.bodySmall)
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Expand Status Logs",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "کنسول دیباگ و وضعیت تانل (Debug Console)",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = if (vpnState == ConnectionState.Connected) SlateAccentGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                ) {
+                    Text(
+                        text = if (vpnState == ConnectionState.Connected) "Active (tun0)" else "Offline",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = if (vpnState == ConnectionState.Connected) SlateAccentGreen else SlateTextSecondary,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
                 }
             }
 
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(savedIps, key = { it.id }) { item ->
-                    Card(
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth().background(Color(0xFF030712), RoundedCornerShape(8.dp)).padding(8.dp)
+                ) {
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        )
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Text("Tunnel Status:", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = SlateTextSecondary)
+                        Text(
+                            text = when (vpnState) {
+                                ConnectionState.Idle -> "Inactive / Idle"
+                                ConnectionState.Resolving -> "DNS & Edge Path Resolving"
+                                ConnectionState.Handshaking -> "TCP Link handshake active"
+                                ConnectionState.Authenticating -> "Verifying credential payload"
+                                ConnectionState.Connected -> "TUN connected & multiplex overlay active"
+                                is ConnectionState.Error -> "Tunnel fault error block"
+                            },
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = if (vpnState == ConnectionState.Connected) SlateAccentGreen else if (vpnState is ConnectionState.Error) MaterialTheme.colorScheme.error else SlateTextPrimary
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Active DNS Routers:", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = SlateTextSecondary)
+                        Text("1.1.1.1 (Cloudflare IPv4), 8.8.8.8 (Google)", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), fontWeight = FontWeight.Bold, color = SlateTextPrimary)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Active Interfaces & IP:", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = SlateTextSecondary)
+                        Text("tun0 (IPv4: 10.0.0.2/32, IPv6: fd00:a::2/128)", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), fontWeight = FontWeight.Bold, color = SlateTextPrimary)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Forwarding Gateway Routes:", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = SlateTextSecondary)
+                        Text("0.0.0.0/0 (IPv4 Default), ::/0 (IPv6 Default)", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), fontWeight = FontWeight.Bold, color = SlateTextPrimary)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("NAT & Protection:", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = SlateTextSecondary)
+                        Text("Full NAT, Protect Socket loops active", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), fontWeight = FontWeight.Medium, color = SlateTextPrimary)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Total Relayed Volume:", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = SlateTextSecondary)
+                        val totalMB = totalBytes / (1024.0 * 1024.0)
+                        val packetsCount = totalBytes / 1200
+                        Text(
+                            text = String.format("%.2f MB (%d packets intercepted)", totalMB, packetsCount),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("فیلتر لاگ:", style = MaterialTheme.typography.labelSmall, color = SlateTextSecondary)
+                    listOf("ALL", "INFO", "WARNING", "ERROR").forEach { level ->
+                        val isSelected = logFilter == level
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
+                            modifier = Modifier.clickable { logFilter = level }
                         ) {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = item.ipAddress,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                            Text(
+                                text = level,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                color = if (isSelected) Color.White else SlateTextSecondary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
 
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.Refresh,
-                                            contentDescription = "Ping",
-                                            modifier = Modifier.size(12.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "${item.latency} ms",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                Spacer(modifier = Modifier.height(6.dp))
 
-                                    if (item.downloadSpeed > 0) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.PlayArrow,
-                                                contentDescription = "Speed",
-                                                modifier = Modifier.size(14.dp),
-                                                tint = MaterialTheme.colorScheme.secondary
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = String.format("%.1f KB/s", item.downloadSpeed),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
-                                        }
-                                    }
-                                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .background(Color(0xFF040713), RoundedCornerShape(6.dp))
+                        .padding(6.dp)
+                ) {
+                    val filteredLogs = remember(logs, logFilter) {
+                        logs.filter { line ->
+                            when (logFilter) {
+                                "INFO" -> !line.contains("warning", ignoreCase = true) && !line.contains("error", ignoreCase = true) && !line.contains("failed", ignoreCase = true) && !line.contains("fatal", ignoreCase = true)
+                                "WARNING" -> line.contains("warning", ignoreCase = true) || line.contains("pending", ignoreCase = true)
+                                "ERROR" -> line.contains("error", ignoreCase = true) || line.contains("fatal", ignoreCase = true) || line.contains("failed", ignoreCase = true)
+                                else -> true
                             }
+                        }
+                    }
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                IconButton(onClick = { onCopyIp(item.ipAddress) }) {
-                                    Icon(
-                                        Icons.Default.Build, // Represent Copy
-                                        contentDescription = "Copy Saved IP",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                    if (filteredLogs.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("لاگی در این فیلتر وجود ندارد", style = MaterialTheme.typography.labelSmall, color = SlateTextSecondary)
+                        }
+                    } else {
+                        val state = rememberLazyListState()
+                        LaunchedEffect(filteredLogs.size) {
+                            if (filteredLogs.isNotEmpty()) {
+                                state.animateScrollToItem(filteredLogs.size - 1)
+                            }
+                        }
+                        
+                        LazyColumn(
+                            state = state,
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            items(filteredLogs) { line ->
+                                val color = when {
+                                    line.contains("warning", ignoreCase = true) -> SlateAccentOrange
+                                    line.contains("error", ignoreCase = true) || line.contains("failed", ignoreCase = true) || line.contains("fatal", ignoreCase = true) -> MaterialTheme.colorScheme.error
+                                    line.contains("successfully", ignoreCase = true) || line.contains("connected", ignoreCase = true) -> SlateAccentGreen
+                                    else -> SlateTextPrimary
                                 }
-
-                                IconButton(onClick = { onRemoveIp(item) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Remove Saved IP",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
+                                Text(
+                                    text = line,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 9.sp,
+                                    color = color,
+                                    lineHeight = 12.sp
+                                )
                             }
                         }
                     }
@@ -858,3 +2330,4 @@ fun SavedResultsView(
         }
     }
 }
+
