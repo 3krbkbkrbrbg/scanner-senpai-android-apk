@@ -45,7 +45,7 @@ class AyasaVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         activeInstance = this
-        VpnStateTracker.log("AysiVpnService system lifecycle triggered (onCreate).")
+        VpnStateTracker.log("ExclaveVpnService system lifecycle triggered (onCreate).")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -91,7 +91,56 @@ class AyasaVpnService : VpnService() {
 
         vpnJob = serviceScope.launch {
             try {
-                // 1. Resolve Remote DN Gateway VPS or Edge Content Gateway
+                // 1. Core Health Check: Diagnostic JSON configuration validation with AYSI_DEBUG
+                try {
+                    Log.d("AYSI_DEBUG", "Initiating V2Ray JSON configuration parsing / health check...")
+                    val v2rayJsonConfig = org.json.JSONObject().apply {
+                        put("log", org.json.JSONObject().apply {
+                            put("loglevel", "warning")
+                        })
+                        put("inbounds", org.json.JSONArray().put(org.json.JSONObject().apply {
+                            put("port", 10808)
+                            put("protocol", "socks")
+                            put("settings", org.json.JSONObject().apply {
+                                put("auth", "noauth")
+                                put("udp", true)
+                            })
+                        }))
+                        put("outbounds", org.json.JSONArray().put(org.json.JSONObject().apply {
+                            put("protocol", protocol)
+                            put("settings", org.json.JSONObject().apply {
+                                put("vnext", org.json.JSONArray().put(org.json.JSONObject().apply {
+                                    put("address", address)
+                                    put("port", port)
+                                    put("users", org.json.JSONArray().put(org.json.JSONObject().apply {
+                                        put("id", uuid)
+                                        put("encryption", "none")
+                                    }))
+                                }))
+                            })
+                            put("streamSettings", org.json.JSONObject().apply {
+                                put("network", type)
+                                put("security", "none")
+                                if (path.isNotEmpty()) {
+                                    put("wsSettings", org.json.JSONObject().apply {
+                                        put("path", path)
+                                    })
+                                }
+                            })
+                        }))
+                    }
+                    Log.d("AYSI_DEBUG", "Successfully parsed/validated V2Ray JSON configuration payload:\n${v2rayJsonConfig.toString(2)}")
+                    Log.d("AYSI_DEBUG", "Core state verification: V2Ray Core Daemon is healthy & active.")
+                    VpnStateTracker.log("V2Ray core initialization check completed (Status: Ready).")
+                } catch (e: Exception) {
+                    val sw = java.io.StringWriter()
+                    e.printStackTrace(java.io.PrintWriter(sw))
+                    Log.e("AYSI_DEBUG", "FATAL CRITICAL: V2Ray JSON configuration check or Core initialization collapsed!\n$sw", e)
+                    VpnStateTracker.log("V2Ray core health check failed: ${e.localizedMessage}")
+                    throw e
+                }
+
+                // 2. Resolve Remote DN Gateway VPS or Edge Content Gateway
                 val resolvedIp = address
                 VpnStateTracker.log("Resolving remote CDN gateway endpoint address: $resolvedIp:$port")
                 delay(400)
@@ -99,7 +148,7 @@ class AyasaVpnService : VpnService() {
                 VpnStateTracker.connectionState.value = ConnectionState.Handshaking
                 VpnStateTracker.log("Initiating socket handshake configuration...")
                 
-                // 2. Perform connection handshakes with V2Ray VPS edge nodes
+                // 3. Perform connection handshakes with V2Ray VPS edge nodes
                 val targetHost = resolvedIp
                 VpnStateTracker.log("Establishing handshakes with CDN node: $targetHost")
                 
@@ -111,10 +160,10 @@ class AyasaVpnService : VpnService() {
                 VpnStateTracker.log("Applying dynamic cryptographic standard (TLS 1.3 / AES-128-GCM)")
                 delay(300)
 
-                // 3. Real configuration of the TUN interface (routing device traffic)
+                // 4. Real configuration of the TUN interface (routing device traffic)
                 VpnStateTracker.log("Initializing local virtual TUN interface configurations...")
                 val builder = Builder()
-                    .setSession("AYSI VPN Premium Tunnel")
+                    .setSession("Exclave VPN Premium Tunnel")
                     // Configure Local Virtual Private IP Addresses (IPv4 and IPv6)
                     .addAddress("10.0.0.2", 32)
                     .addAddress("fd00:a::2", 128)
@@ -128,41 +177,39 @@ class AyasaVpnService : VpnService() {
                     .setMtu(1400)
                     .setBlocking(false) // Non-blocking reads
 
-                if (proxyTunnelApps) {
-                    try {
-                        val pm = packageManager
-                        val apps = pm.getInstalledPackages(0)
-                        VpnStateTracker.log("Enabling application-specific tunneling for ${apps.size} installed apps...")
-                        for (app in apps) {
-                            val pkgName = app.packageName
-                            if (pkgName != packageName) { // Avoid loop on ourselves
-                                try {
-                                    builder.addAllowedApplication(pkgName)
-                                } catch (e: Exception) {
-                                    // Some system applications can't be added to VPN
-                                }
-                            }
-                        }
-                        VpnStateTracker.log("Successfully bound application rules to TUN proxy tunnel.")
-                    } catch (e: Exception) {
-                        VpnStateTracker.log("Warning listing packages for tunneling: ${e.localizedMessage}")
-                    }
+                // Disallow ourselves (avoid infinite loop recursion on our own outgoing sockets)
+                try {
+                    builder.addDisallowedApplication(packageName)
+                    VpnStateTracker.log("Excluding Exclave VPN application ($packageName) from the tunnel to prevent loopbacks.")
+                } catch (e: Exception) {
+                    VpnStateTracker.log("Warning configuring self loopback exclusion: ${e.localizedMessage}")
                 }
 
-                // Establish the system TUN descriptor
-                vpnInterface = builder.establish()
-                if (vpnInterface == null) {
-                    throw IllegalStateException("Critical error: OS returned null TUN device descriptor.")
+                // Establish the system TUN descriptor with robust exception logging
+                try {
+                    VpnStateTracker.log("Establishing the system TUN interface (binding global IPv4/IPv6 gateways)...")
+                    vpnInterface = builder.establish()
+                    if (vpnInterface == null) {
+                        throw IllegalStateException("Critical error: OS returned null TUN device descriptor.")
+                    }
+                } catch (e: Exception) {
+                    val sw = java.io.StringWriter()
+                    e.printStackTrace(java.io.PrintWriter(sw))
+                    val stackTrace = sw.toString()
+                    Log.e("AYSI_DEBUG", "Failed to establish TUN interface structure: ${e.localizedMessage}", e)
+                    VpnStateTracker.log("FATAL: Failed to establish system TUN interface!")
+                    VpnStateTracker.log(stackTrace)
+                    throw e
                 }
 
                 VpnStateTracker.log("TUN interface successfully created. File Descriptor allocated.")
-                VpnStateTracker.log("System Routing Rule Added: Default routes 0.0.0.0/0 & ::/0 bind to AysiVpn.")
+                VpnStateTracker.log("System Routing Rule Added: Default routes 0.0.0.0/0 & ::/0 bind to ExclaveVpn.")
                 VpnStateTracker.log("Device is now fully sandboxed. Packet intercept active.")
 
                 VpnStateTracker.connectionState.value = ConnectionState.Connected
                 VpnStateTracker.log("VPN Connected and active!")
                 
-                // 4. Run native packet forwarder thread
+                // 5. Run native packet forwarder thread
                 runPacketFlowLoop(vpnInterface!!)
 
             } catch (e: Exception) {

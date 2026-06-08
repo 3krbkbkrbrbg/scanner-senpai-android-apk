@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -70,11 +71,11 @@ fun ScannerScreen(
     val downloadSpeed by viewModel.vpnDownloadSpeed.collectAsStateWithLifecycle()
     val totalBytes by viewModel.vpnTotalBytes.collectAsStateWithLifecycle()
 
-    var activeTab by remember { mutableStateOf(0) } // 0=Scanner, 1=V2Ray VPN, 2=Subs, 3=Saved IPs, 4=Params
+    var activeTab by remember { mutableStateOf(0) } // 0=Scanner, 1=Saved IPs, 2=Config
     var showSplash by remember { mutableStateOf(true) }
 
     if (showSplash) {
-        AysiSplashScreen(onTimeout = { showSplash = false })
+        SenPaiSplashScreen(onTimeout = { showSplash = false })
     } else {
         Scaffold(
             topBar = {
@@ -91,8 +92,8 @@ fun ScannerScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = "AYSI VPN Secure Icon",
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = "SenPai Scanner Icon",
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -100,13 +101,13 @@ fun ScannerScreen(
                             }
                             Column {
                                 Text(
-                                    text = "AYSI VPN",
+                                    text = "SenPai Scanner",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onBackground
                                 )
                                 Text(
-                                    "Ultra-Secure V2Ray Tunnel & IP Scanner",
+                                    "اسکنر حرفه‌ای آی‌پی تمیز کلودفلر",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -114,10 +115,7 @@ fun ScannerScreen(
                         }
                     },
                 actions = {
-                    if (vpnState == ConnectionState.Connected) {
-                        TrafficIndicator(uploadSpeed = uploadSpeed, downloadSpeed = downloadSpeed, isConnected = true)
-                    }
-                    if (isScanning || isUpdatingSubs || isTestingConfigs) {
+                    if (isScanning) {
                         CircularProgressIndicator(
                             color = MaterialTheme.colorScheme.primary,
                             strokeWidth = 2.dp,
@@ -125,12 +123,6 @@ fun ScannerScreen(
                                 .size(24.dp)
                                 .padding(end = 8.dp)
                         )
-                    }
-                    IconButton(onClick = {
-                        viewModel.updateAndPingAllSubscriptions()
-                        Toast.makeText(context, "در حال بروزرسانی مخازن...", Toast.LENGTH_SHORT).show()
-                    }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Subscriptions")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -154,27 +146,13 @@ fun ScannerScreen(
                 NavigationBarItem(
                     selected = activeTab == 1,
                     onClick = { activeTab = 1 },
-                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = "VPN Tab") },
-                    label = { Text("ویتوری VPN", fontSize = 10.sp) },
-                    modifier = Modifier.testTag("nav_vpn_tab")
-                )
-                NavigationBarItem(
-                    selected = activeTab == 2,
-                    onClick = { activeTab = 2 },
-                    icon = { Icon(Icons.Default.Share, contentDescription = "Subs Tab") },
-                    label = { Text("مخازن (Sub)", fontSize = 10.sp) },
-                    modifier = Modifier.testTag("nav_subs_tab")
-                )
-                NavigationBarItem(
-                    selected = activeTab == 3,
-                    onClick = { activeTab = 3 },
                     icon = { Icon(Icons.Default.Favorite, contentDescription = "Saved Tab") },
                     label = { Text("پین‌شده‌ها", fontSize = 10.sp) },
                     modifier = Modifier.testTag("nav_saved_tab")
                 )
                 NavigationBarItem(
-                    selected = activeTab == 4,
-                    onClick = { activeTab = 4 },
+                    selected = activeTab == 2,
+                    onClick = { activeTab = 2 },
                     icon = { Icon(Icons.Default.Settings, contentDescription = "Config Tab") },
                     label = { Text("تنظیمات", fontSize = 10.sp) },
                     modifier = Modifier.testTag("nav_config_tab")
@@ -298,40 +276,7 @@ fun ScannerScreen(
                     },
                     savedIps = savedIpsList
                 )
-                1 -> V2RayClientView(
-                    viewModel = viewModel,
-                    v2RayConfigs = v2RayConfigs,
-                    selectedConfig = selectedConfig,
-                    savedIps = savedIpsList,
-                    vpnState = vpnState,
-                    logs = vpnLogs,
-                    uploadSpeed = uploadSpeed,
-                    downloadSpeed = downloadSpeed,
-                    totalBytes = totalBytes,
-                    onCopyConfig = { config ->
-                        val optimizedUri = if (config.optimizedIp.isNotEmpty()) {
-                            V2RayParser.optimizeUriWithIp(config, config.optimizedIp)
-                        } else {
-                            config.rawUri
-                        }
-                        clipboardManager.setText(AnnotatedString(optimizedUri))
-                        Toast.makeText(context, "کانفیگ برای v2rayNG کپی شد", Toast.LENGTH_SHORT).show()
-                    },
-                    onSwapIp = { config, ip ->
-                        viewModel.optimizeConfigWithCleanIp(config, ip)
-                        Toast.makeText(context, "آی‌پی کانفیگ با $ip جایگزین شد!", Toast.LENGTH_SHORT).show()
-                    },
-                    onRevertIp = { config ->
-                        viewModel.removeOptimization(config)
-                        Toast.makeText(context, "تنظیمات آی‌پی به حالت اول برگشت", Toast.LENGTH_SHORT).show()
-                    }
-                )
-                2 -> SubscriptionsView(
-                    viewModel = viewModel,
-                    subscriptions = subscriptions,
-                    isUpdating = isUpdatingSubs
-                )
-                3 -> SavedResultsView(
+                1 -> SavedResultsView(
                     viewModel = viewModel,
                     savedIps = savedIpsList,
                     onCopyIp = { ip ->
@@ -343,7 +288,7 @@ fun ScannerScreen(
                         Toast.makeText(context, "برداشته شد", Toast.LENGTH_SHORT).show()
                     }
                 )
-                4 -> ConfigView(viewModel = viewModel, isScanning = isScanning)
+                2 -> ConfigView(viewModel = viewModel, isScanning = isScanning)
             }
         }
     }
@@ -688,6 +633,7 @@ fun V2RayClientView(
     val context = LocalContext.current
     var selectedConfigForOptimize by remember { mutableStateOf<V2RayConfig?>(null) }
     var showOptimizationDialog by remember { mutableStateOf(false) }
+    var showAdvancedTools by remember { mutableStateOf(false) }
     val proxyTunnelAppsEnabled by viewModel.vpnService.proxyTunnelAppsEnabled.collectAsStateWithLifecycle()
     
     // Manual setup / Editing modes state
@@ -722,370 +668,209 @@ fun V2RayClientView(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 1. Compact Premium Connect Dashboard Card
-        Card(
-            modifier = Modifier.fillMaxWidth().testTag("vpn_dashboard_card"),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Info Section
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    val statusColor = when (vpnState) {
-                        ConnectionState.Idle -> SlateTextSecondary
-                        ConnectionState.Connected -> SlateAccentGreen
-                        is ConnectionState.Error -> MaterialTheme.colorScheme.error
-                        else -> SlateAccentOrange
-                    }
-                    
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = statusColor,
-                            modifier = Modifier.size(8.dp)
-                        ) {}
-                        Text(
-                            text = when (vpnState) {
-                                ConnectionState.Idle -> "غیرفعال (Disconnected)"
-                                ConnectionState.Resolving -> "در حال بررسی روت..."
-                                ConnectionState.Handshaking -> "در حال ثبت لندینگ..."
-                                ConnectionState.Authenticating -> "در حال رمزگذاری..."
-                                ConnectionState.Connected -> "امن و متصل شده"
-                                is ConnectionState.Error -> "خطای اتصال به سرور"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = statusColor
-                        )
-                    }
-
-                    if (selectedConfig != null) {
-                        Text(
-                            text = selectedConfig.remark,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Black,
-                            color = SlateTextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "پروتکل: ${selectedConfig.protocol.uppercase()} (${selectedConfig.type.uppercase()})",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SlateTextSecondary
-                        )
-                    } else {
-                        Text(
-                            text = "سروری انتخاب نشده است",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = SlateTextSecondary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // Small elegant Connect Button with pulsing indicator on action
-                val isButtonAnimating = vpnState != ConnectionState.Idle
-                val buttonColor = when (vpnState) {
-                    ConnectionState.Idle -> MaterialTheme.colorScheme.primary
-                    ConnectionState.Connected -> MaterialTheme.colorScheme.error
-                    is ConnectionState.Error -> MaterialTheme.colorScheme.error
-                    else -> SlateAccentOrange
-                }
-
-                Box(contentAlignment = Alignment.Center) {
-                    if (isButtonAnimating) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .graphicsLayer(
-                                    scaleX = pulseScale,
-                                    scaleY = pulseScale,
-                                    alpha = pulseAlpha
-                                )
-                                .background(buttonColor.copy(alpha = 0.45f), shape = CircleShape)
-                        )
-                    }
-                    
-                    Surface(
-                        onClick = {
-                            if (vpnState == ConnectionState.Connected) {
-                                viewModel.vpnService.disconnect()
-                            } else {
-                                val activeConfig = selectedConfig ?: v2RayConfigs.firstOrNull()
-                                if (activeConfig != null) {
-                                    viewModel.vpnService.connect(activeConfig)
-                                } else {
-                                    Toast.makeText(context, "لطفا ابتدا یک سرور اضافه کنید", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        shape = CircleShape,
-                        color = buttonColor,
-                        modifier = Modifier.size(52.dp).testTag("vpn_toggle_button"),
-                        tonalElevation = 6.dp
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = if (vpnState == ConnectionState.Connected) Icons.Default.Close else Icons.Default.PlayArrow,
-                                contentDescription = "Connect Toggle",
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Metrics Telemetry Cards (Gauges)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowDown, "Download Icon", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
-                        Text("دریافت (Download)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (vpnState == ConnectionState.Connected) String.format("%.1f KB/s", downloadSpeed) else "0.0 KB/s",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = SlateAccentGreen
-                    )
-                }
-            }
-
-            Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowUp, "Upload Icon", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                        Text("ارسال (Upload)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (vpnState == ConnectionState.Connected) String.format("%.1f KB/s", uploadSpeed) else "0.0 KB/s",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-
-        // Active server name / metadata card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
-        ) {
-            Column(
-                modifier = Modifier.padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (selectedConfig != null) {
-                    Text(
-                        text = "سرور فعال: ${selectedConfig.remark}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "پروتکل اتصال: ${selectedConfig.protocol.uppercase()} (${selectedConfig.type.uppercase()})",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        text = "هیچ سروری انتخاب نشده است",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = SlateTextSecondary
-                    )
-                }
-            }
-        }
-
-        // Setting: Proxy Tunnel Applications
-        Card(
-            modifier = Modifier.fillMaxWidth().testTag("proxy_tunnel_apps_card"),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share, 
-                        contentDescription = "Proxy Apps Icon", 
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Column {
-                        Text(
-                            text = "Proxy Tunnel Applications",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = SlateTextPrimary
-                        )
-                        Text(
-                            text = "هدایت تمام ترافیک برنامه‌های نصب‌شده از تانل",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SlateTextSecondary
-                        )
-                    }
-                }
-                
-                Switch(
-                    checked = proxyTunnelAppsEnabled,
-                    onCheckedChange = { viewModel.vpnService.setProxyTunnelAppsEnabled(it) },
-                    modifier = Modifier.testTag("proxy_tunnel_apps_switch")
-                )
-            }
-        }
-
-        // Expanded/Collapsible Detailed Debug Config status logs and filters
-        DebugLogSection(
-            vpnState = vpnState,
-            logs = logs,
-            totalBytes = totalBytes,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        // 3. Real-Time Terminal Log console (Collapsible metadata logs)
+        // 1. Advanced Futuristic Core Control Dial (Inspired by Exclave style)
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF040815))
+                .size(200.dp)
                 .padding(8.dp)
+                .testTag("vpn_dashboard_card"),
+            contentAlignment = Alignment.Center
         ) {
-            val displayLogs = logs.takeLast(3)
-            if (displayLogs.isEmpty()) {
-                Text(
-                    "کنسول رمزگذاری AYSI VPN آماده برقراری اتصال امن...",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = SlateTextSecondary,
-                    textAlign = TextAlign.Start
-                )
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(displayLogs) { logLine ->
-                        Text(
-                            logLine,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
-                            color = if (logLine.contains("successfully") || logLine.contains("Connected") || logLine.contains("system")) SlateAccentGreen else if (logLine.contains("Error") || logLine.contains("Fatal")) MaterialTheme.colorScheme.error else SlateTextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+            // Pulse outer glowing radiant circles for active/handshaking connection states
+            if (vpnState != ConnectionState.Idle) {
+                Box(
+                    modifier = Modifier
+                        .size(190.dp)
+                        .graphicsLayer(
+                            scaleX = pulseScale,
+                            scaleY = pulseScale,
+                            alpha = pulseAlpha
                         )
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                                colors = listOf(
+                                    (if (vpnState == ConnectionState.Connected) SlateAccentGreen else SlateAccentOrange).copy(alpha = 0.35f),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
+            }
+            
+            // Continuous spinning ring when system is not Idle
+            val spinAngle by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(4000, easing = androidx.compose.animation.core.LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "spin_angle"
+            )
+            
+            androidx.compose.foundation.Canvas(modifier = Modifier.size(175.dp)) {
+                // Subtle static background chassis ring
+                drawCircle(
+                    color = SlateSurfaceVariant.copy(alpha = 0.25f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5.dp.toPx())
+                )
+                
+                // Active status reactive color indicator
+                val strokeColor = when (vpnState) {
+                    ConnectionState.Idle -> SlateTextSecondary.copy(alpha = 0.35f)
+                    ConnectionState.Connected -> SlateAccentGreen
+                    is ConnectionState.Error -> Color.Red
+                    else -> SlatePrimary
+                }
+                
+                // Rotate the glowing sectors around the core
+                rotate(spinAngle) {
+                    drawArc(
+                        color = strokeColor,
+                        startAngle = -90f,
+                        sweepAngle = 100f,
+                        useCenter = false,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 5.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                    )
+                    drawArc(
+                        color = strokeColor.copy(alpha = 0.3f),
+                        startAngle = 90f,
+                        sweepAngle = 80f,
+                        useCenter = false,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 5.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                    )
+                }
+            }
+            
+            // Beautiful interactive central tactical pad button
+            Surface(
+                onClick = {
+                    if (vpnState == ConnectionState.Connected) {
+                        viewModel.vpnService.disconnect()
+                    } else {
+                        val activeConfig = selectedConfig ?: v2RayConfigs.firstOrNull()
+                        if (activeConfig != null) {
+                            viewModel.vpnService.connect(activeConfig)
+                        } else {
+                            Toast.makeText(context, "لطفا ابتدا یک سرور اضافه کنید", Toast.LENGTH_SHORT).show()
+                        }
                     }
+                },
+                shape = CircleShape,
+                color = SlateSurface,
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 2.dp,
+                    color = when (vpnState) {
+                        ConnectionState.Idle -> SlateSurfaceVariant
+                        ConnectionState.Connected -> SlateAccentGreen
+                        is ConnectionState.Error -> Color.Red
+                        else -> SlatePrimary
+                    }
+                ),
+                modifier = Modifier
+                    .size(130.dp)
+                    .testTag("vpn_toggle_button"),
+                tonalElevation = 8.dp
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    Icon(
+                        imageVector = when (vpnState) {
+                            ConnectionState.Idle -> Icons.Default.Lock
+                            ConnectionState.Connected -> Icons.Default.CheckCircle
+                            is ConnectionState.Error -> Icons.Default.Warning
+                            else -> Icons.Default.Refresh
+                        },
+                        contentDescription = "Shield Connection Status",
+                        tint = when (vpnState) {
+                            ConnectionState.Idle -> SlateTextSecondary
+                            ConnectionState.Connected -> SlateAccentGreen
+                            is ConnectionState.Error -> Color.Red
+                            else -> SlatePrimary
+                        },
+                        modifier = Modifier.size(28.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(6.dp))
+                    
+                    Text(
+                        text = when (vpnState) {
+                            ConnectionState.Idle -> "غیرفعال"
+                            ConnectionState.Connected -> "اتصال امن"
+                            is ConnectionState.Error -> "خطای سرور"
+                            ConnectionState.Resolving -> "تحلیل مسیر..."
+                            ConnectionState.Handshaking -> "دست‌دهی..."
+                            ConnectionState.Authenticating -> "رمزگذاری..."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Black,
+                        color = when (vpnState) {
+                            ConnectionState.Idle -> SlateTextSecondary
+                            ConnectionState.Connected -> SlateAccentGreen
+                            is ConnectionState.Error -> Color.Red
+                            else -> SlatePrimary
+                        }
+                    )
+                    
+                    Text(
+                        text = when (vpnState) {
+                            ConnectionState.Idle -> "TAP TO ACTIVATE"
+                            ConnectionState.Connected -> "SECURE / TOUCH TO RESET"
+                            is ConnectionState.Error -> "RESTART CORRUPTION"
+                            else -> "TUNNEL ESTABLISHING"
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = SlateTextSecondary,
+                        letterSpacing = 0.5.sp
+                    )
                 }
             }
         }
 
-        // TOOLBAR: manual addition, clipboard paste and pinging
+        // Active Server Display Indicator (Minimal and beautiful)
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(
-                onClick = {
-                    configToEdit = null // Adding mode
-                    showEditDialog = true
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Config", modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(2.dp))
-                Text("افزودن دستی", style = MaterialTheme.typography.labelSmall)
-            }
-
-            val clipboardManager = LocalClipboardManager.current
-            Button(
-                onClick = {
-                    val clipText = clipboardManager.getText()?.text ?: ""
-                    viewModel.importFromClipboard(
-                        text = clipText,
-                        onSuccess = { count ->
-                            Toast.makeText(context, "$count سرور با موفقیت وارد شد!", Toast.LENGTH_LONG).show()
-                        },
-                        onError = { errorMsg ->
-                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
-                        }
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (vpnState == ConnectionState.Connected) SlateAccentGreen else SlateTextSecondary,
+                                shape = CircleShape
+                            )
                     )
-                },
-                modifier = Modifier.weight(1.2f).testTag("clipboard_import_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Icon(Icons.Default.Share, contentDescription = "Paste Clipboard", modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(2.dp))
-                Text("افزودن از کلیپ‌بورد", style = MaterialTheme.typography.labelSmall)
-            }
-
-            Button(
-                onClick = { viewModel.pingAllConfigs() },
-                enabled = !viewModel.isTestingConfigs.collectAsStateWithLifecycle().value,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Test Ping", modifier = Modifier.size(13.dp))
-                Spacer(modifier = Modifier.width(2.dp))
-                Text("پینگ همگانی", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        text = if (selectedConfig != null) "سرور فعال: ${selectedConfig.remark}" else "سروری انتخاب نشده است",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selectedConfig != null) SlateTextPrimary else SlateTextSecondary
+                    )
+                }
             }
         }
 
@@ -1380,6 +1165,254 @@ fun V2RayClientView(
                                             )
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collapsible Advanced Section at the bottom of the main layout, below the list
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Toggle row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAdvancedTools = !showAdvancedTools }
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (showAdvancedTools) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Toggle Advanced Panel",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "تنظیمات پیشرفته، ابزارها و کنسول",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = SlateTextSecondary
+                        )
+                    }
+
+                    if (!showAdvancedTools && vpnState == ConnectionState.Connected) {
+                        Text(
+                            text = "▼ ${String.format("%.1f", downloadSpeed)} KB/s  ▲ ${String.format("%.1f", uploadSpeed)} KB/s",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = SlateAccentGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                if (showAdvancedTools) {
+                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), thickness = 1.dp)
+
+                    // 1. Toolbars for imports and pings
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                configToEdit = null // Adding mode
+                                showEditDialog = true
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Add Config", modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("افزودن دستی", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp))
+                        }
+
+                        val clipboardManager = LocalClipboardManager.current
+                        Button(
+                            onClick = {
+                                val clipText = clipboardManager.getText()?.text ?: ""
+                                viewModel.importFromClipboard(
+                                    text = clipText,
+                                    onSuccess = { count ->
+                                        Toast.makeText(context, "$count سرور با موفقیت وارد شد!", Toast.LENGTH_LONG).show()
+                                    },
+                                    onError = { errorMsg ->
+                                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                                    }
+                                )
+                            },
+                            modifier = Modifier.weight(1.2f).testTag("clipboard_import_button"),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.8f),
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Paste Clipboard", modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("افزودن از کلیپ‌بورد", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp))
+                        }
+
+                        Button(
+                            onClick = { viewModel.pingAllConfigs() },
+                            enabled = !viewModel.isTestingConfigs.collectAsStateWithLifecycle().value,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Test Ping", modifier = Modifier.size(11.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("پینگ همگانی", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp))
+                        }
+                    }
+
+                    // 2. Metrics Telemetry Cards (Gauges)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowDown, "Download Icon", tint = SlateAccentGreen, modifier = Modifier.size(14.dp))
+                                    Text("دریافت (Download)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text(
+                                    text = if (vpnState == ConnectionState.Connected) String.format("%.1f KB/s", downloadSpeed) else "0.0 KB/s",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = SlateAccentGreen
+                                )
+                            }
+                        }
+
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowUp, "Upload Icon", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                                    Text("ارسال (Upload)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text(
+                                    text = if (vpnState == ConnectionState.Connected) String.format("%.1f KB/s", uploadSpeed) else "0.0 KB/s",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    // 3. Proxy application list system toggle card
+                    Card(
+                        modifier = Modifier.fillMaxWidth().testTag("proxy_tunnel_apps_card"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = "Proxy Apps Icon", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Column {
+                                    Text("پراکسی کردن سایر اپلیکیشن‌ها", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SlateTextPrimary)
+                                    Text("هدایت ترافیک مرورگرها و پیام‌رسان‌ها (مثل تلگرام)", style = MaterialTheme.typography.labelSmall, color = SlateTextSecondary, fontSize = 8.sp)
+                                }
+                            }
+                            Switch(
+                                checked = proxyTunnelAppsEnabled,
+                                onCheckedChange = { viewModel.vpnService.setProxyTunnelAppsEnabled(it) },
+                                modifier = Modifier.testTag("proxy_tunnel_apps_switch")
+                            )
+                        }
+                    }
+
+                    // 4. Debug Config checks details
+                    DebugLogSection(
+                        vpnState = vpnState,
+                        logs = logs,
+                        totalBytes = totalBytes,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // 5. Terminal log simulator window
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF02040B))
+                            .padding(6.dp)
+                    ) {
+                        val displayLogs = logs.takeLast(3)
+                        if (displayLogs.isEmpty()) {
+                            Text(
+                                "کنسول سیستم آماده تانلینگ...",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.sp,
+                                color = SlateTextSecondary
+                            )
+                        } else {
+                            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                items(displayLogs) { logLine ->
+                                    Text(
+                                        logLine,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 8.sp,
+                                        color = if (logLine.contains("successfully") || logLine.contains("Connected") || logLine.contains("system")) SlateAccentGreen else if (logLine.contains("Error") || logLine.contains("Fatal")) MaterialTheme.colorScheme.error else SlateTextPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }
@@ -1877,34 +1910,12 @@ fun ConfigView(
             }
         }
 
-        item {
-            val proxyTunnelAppsEnabled by viewModel.vpnService.proxyTunnelAppsEnabled.collectAsStateWithLifecycle()
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Proxy Tunnel Applications", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        Text("تونل کردن اجباری و ۱۰۰ درصدی تمام برنامه‌های نصب‌پذیر دستگاه از تانل VPN.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = proxyTunnelAppsEnabled,
-                        onCheckedChange = { viewModel.vpnService.setProxyTunnelAppsEnabled(it) }
-                    )
-                }
-            }
-        }
-
-        // About AYSI VPN Premium Integrity Card
+        // About SenPai Scanner Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF42A5F5).copy(alpha = 0.25f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, SlatePrimary.copy(alpha = 0.25f)),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
@@ -1922,8 +1933,8 @@ fun ConfigView(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Shield Lock",
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search Icon",
                                     tint = SlatePrimary,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -1931,13 +1942,13 @@ fun ConfigView(
                         }
                         Column {
                             Text(
-                                "AYSI VPN Premium",
+                                "SenPai Scanner Suite",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Black,
                                 color = SlateTextPrimary
                             )
                             Text(
-                                "امنیت نظامی، آزادی بی حد و مرز",
+                                "ابزار فوق‌حرفه‌ای تست کیفیت و یافتن IP تمیز کلودفلر",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SlateAccentGreen,
                                 fontWeight = FontWeight.Bold
@@ -1950,26 +1961,26 @@ fun ConfigView(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Check, "Checked", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
-                            Text("رمزگذاری پیشرفته AES-256 GCM", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
+                            Text("تولید خودکار رنج‌های گسترده IP جهت پوشش حداکثری", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Check, "Checked", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
-                            Text("عدم ذخیره‌سازی ترافیک (Strict No-Logs 정책)", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
+                            Text("پینگ همزمان و چندرشته‌ای (Multi-Threaded) با کارایی بالا", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Check, "Checked", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
-                            Text("رابطه اتصال روتین پایدار با سرعت تانلینگ بالا", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
+                            Text("اندازه‌گیری دقیق پینگ، جیتر و فیلترینگ شبکه", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Check, "Checked", tint = SlateAccentGreen, modifier = Modifier.size(16.dp))
-                            Text("سازگاری با IPv4 و IPv6 دوگانه به صورت خودکار", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
+                            Text("تست سرعت واقعی دانلود و پهنای باند آی‌پی‌ها", style = MaterialTheme.typography.bodySmall, color = SlateTextSecondary)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "نسخه برنامه: v2.5.0 Premium Edition\nتوسعه یافته با ❤️ برای آزادی اینترنت و حریم شخصی کاربران ایران.",
+                        text = "نسخه برنامه: v3.1.0 SenPai Edition\nتوسعه یافته با ❤️ برای آزادی اینترنت و سهولت کاربران ایرانی.",
                         style = MaterialTheme.typography.labelSmall,
                         color = SlateTextSecondary.copy(alpha = 0.8f),
                         fontSize = 10.sp,
@@ -1982,7 +1993,7 @@ fun ConfigView(
 }
 
 @Composable
-fun AysiSplashScreen(
+fun SenPaiSplashScreen(
     onTimeout: () -> Unit
 ) {
     LaunchedEffect(Unit) {
@@ -1993,26 +2004,26 @@ fun AysiSplashScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF070B19)),
+            .background(Color(0xFF040611)),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Rounded Shield Logo Frame
+            // Rounded Search Frame with SenPai Primary border
             Surface(
                 shape = RoundedCornerShape(24.dp),
-                color = Color(0xFF0F172A),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF42A5F5).copy(alpha = 0.4f)),
-                modifier = Modifier.size(100.dp)
+                color = Color(0xFF0D1226),
+                border = androidx.compose.foundation.BorderStroke(2.dp, SlatePrimary.copy(alpha = 0.8f)),
+                modifier = Modifier.size(110.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "AYSI Shield",
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "SenPai Logo",
                         tint = SlateAccentGreen,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(52.dp)
                     )
                 }
             }
@@ -2020,7 +2031,7 @@ fun AysiSplashScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "AYSI VPN",
+                text = "SenPai Scanner",
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Black,
                     letterSpacing = 4.sp
@@ -2031,7 +2042,7 @@ fun AysiSplashScreen(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "امنیت واقعی، اینترنت آزاد",
+                text = "اسکنر هوشمند و ارزیابی کیفیت IP کلودفلر",
                 style = MaterialTheme.typography.bodySmall,
                 color = SlateAccentGreen,
                 fontWeight = FontWeight.Bold

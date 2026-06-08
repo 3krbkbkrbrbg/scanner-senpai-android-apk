@@ -1,6 +1,6 @@
 {
-  "name": "AYSI VPN",
-  "description": "Premium High-Speed V2Ray VPN with integrated Cloudflare CDN IP optimization, premium layout and military-grade encryption.",
+  "name": "SenPai Scanner",
+  "description": "SenPai Scanner - High performance CDN and Cloudflare Edge IP scanner, speed tester, and networking latency diagnostics tool.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
