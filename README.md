@@ -1,21 +1,33 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# SenPai Scanner 🔍
 
-# Run and deploy your AI Studio app
+اپلیکیشن اندرویدی SenPai Scanner — همراه با سرویس VPN داخلی (`AyasaVpnService`).
 
-This contains everything you need to run your app locally.
+## ✨ امکانات
 
-View your app in AI Studio: https://ai.studio/apps/6f14678a-3e2a-4a71-9bd5-efdc2ac783a6
+- رابط کاربری Jetpack Compose
+- سرویس VPN سیستمی از طریق `VpnService` اندروید
+- APK آماده نصب — بدون نیاز به بیلد گرفتن
 
-## Run Locally
+## 📦 دانلود مستقیم APK
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+فایل `app-debug.apk` مستقیماً از این مخزن قابل دانلود است:
 
+**[⬇️ دانلود app-debug.apk](https://github.com/3krbkbkrbrbg/scanner-senpai-android-apk/raw/main/.build-outputs/app-debug.apk)**
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+### مراحل نصب
+
+1. APK را دانلود کن.
+2. گزینه «نصب از منابع ناشناس» را برای فایل‌منیجر یا مرورگرت فعال کن.
+3. فایل را باز کن و Install را بزن.
+4. هنگام اجرای سرویس VPN، دسترسی سیستم را تأیید کن.
+
+## 🛠 بیلد از سورس
+
+پیش‌نیاز: [Android Studio](https://developer.android.com/studio)
+
+1. پروژه را در Android Studio باز کن.
+2. اجازه بده ناسازگاری‌های import خودکار اصلاح شود.
+3. در صورت نیاز یک فایل `.env` در ریشه پروژه بساز و `GEMINI_API_KEY` را داخلش قرار بده.
+4. **Run** ▶️ — یا برای خروجی APK از منوی Build ← Build Bundle(s)/APK(s) استفاده کن.
+
+این پروژه از [AI Studio](https://ai.studio/apps/6f14678a-3e2a-4a71-9bd5-efdc2ac783a6) هم قابل دسترسی است.
